@@ -1,0 +1,987 @@
+
+<!doctype html>
+
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, minimum-scale=1.0, initial-scale=1.0, user-scalable=yes">
+  <meta name="theme-color" content="#4F7DC9">
+  <meta charset="UTF-8">
+  <title>Anthos Config Management Basic Hands-on</title>
+  <link rel="stylesheet" href="//fonts.googleapis.com/css?family=Source+Code+Pro:400|Roboto:400,300,400italic,500,700|Roboto+Mono">
+  <link rel="stylesheet" href="//fonts.googleapis.com/icon?family=Material+Icons">
+  <link rel="stylesheet" href="https://storage.googleapis.com/codelab-elements/codelab-elements.css">
+  <style>
+    .success {
+      color: #1e8e3e;
+    }
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <google-codelab-analytics gaid="UA-49880327-14"></google-codelab-analytics>
+  <google-codelab codelab-gaid=""
+                  id="appdev-anthos-config-management-basic-codelab"
+                  title="Anthos Config Management Basic Hands-on"
+                  environment="web"
+                  feedback-link="https://github.com/google-cloud-japan/appdev-anthos-config-management-basic-codelab">
+    
+      <google-codelab-step label="Anthos Config Management" duration="0">
+        <p>このハンズオンでは Anthos Config Management の導入、設定を通じて基礎的な機能を学習します。</p>
+<h2 is-upgraded>1.1 Anthos Config Management (ACM) とは？</h2>
+<p class="image-container"><img alt="Anthos Config Management" src="img/47db591c06894091.png"></p>
+<p>ACM を使うことで以下の 2 つのことが実現できます。</p>
+<ul>
+<li>ハイブリッド、マルチクラウド環境に存在する大規模な Kubernetes 環境を一貫性を持った形で、セキュアに管理する</li>
+<li>Google Cloud のリソース (GKE クラスタ、Spanner インスタンス、VM など) を Kubernetes のマニフェストで作成、管理する (IaC の実現)</li>
+</ul>
+<h2 is-upgraded>1.2 ACM のコンポーネント</h2>
+<p>ACM は複数のコンポーネントで構成されています。</p>
+<ul>
+<li>Config Sync  <ul>
+<li>GKE クラスタ上で動作し、1 つ以上の Git リポジトリを監視し、自身のクラスタのあるべき状態を継続的に適用します。</li>
+</ul>
+</li>
+<li>Policy Controller  <ul>
+<li>GKE クラスタ上で動作し、クラスタの各種 API 操作に対してポリシーを設定します。</li>
+</ul>
+</li>
+<li>Config Connector  <ul>
+<li>GKE クラスタ上で動作し、Kubernetes のリソースモデルを使い、Google Cloud のリソースを作成します。</li>
+</ul>
+</li>
+<li>Config Controller  <ul>
+<li>Config Sync, Policy Controller, Config Connector が動作するクラスタをホスト型で提供するマネージドサービスです。</li>
+</ul>
+</li>
+</ul>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="ACM のユースケースとコンポーネント" duration="0">
+        <h2 is-upgraded>2.1 大規模な Kubernetes 環境を一貫性を持った形でセキュアに管理する</h2>
+<p class="image-container"><img alt="Multi Cluster Management" src="img/1f4986406e190f6b.png"></p>
+<h2 is-upgraded>2.2 Google Cloud のリソースを KRM で管理する (IaC の実現)</h2>
+<p class="image-container"><img alt="KRM with Config Controller" src="img/e1085d15e0a33f95.png"></p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="ハンズオン概要" duration="0">
+        <h2 is-upgraded>3.1 利用プロダクト</h2>
+<ul>
+<li><a href="https://cloud.google.com/kubernetes-engine/" target="_blank">Google Kubernetes Engine</a></li>
+<li><a href="https://cloud.google.com/anthos/config-management" target="_blank">Anthos Config Management</a></li>
+<li><a href="https://cloud.google.com/source-repositories" target="_blank">Cloud Source Repositories</a></li>
+</ul>
+<h2 is-upgraded>3.2 前提知識</h2>
+<ul>
+<li>Kubernetes の操作、基礎的な Kubernetes リソース (Service, Deployment, Pod) の知識</li>
+<li>Git の基礎的な使い方</li>
+</ul>
+<h2 is-upgraded>3.3 前提条件</h2>
+<p>本ハンズオンは、Billing が有効な Google Cloud プロジェクトで行うこと、また各種コマンドは <a href="https://cloud.google.com/shell/" target="_blank">Cloud Shell</a> で実行することを前提としています。環境がない場合は、事前に Google Cloud プロジェクトをご用意ください。</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="事前準備" duration="0">
+        <h2 is-upgraded>4.1 Google Cloud Console へアクセス</h2>
+<p><a href="https://console.cloud.google.com/" target="_blank">Google Cloud コンソール</a> から Google Cloud Console にブラウザでアクセスします。</p>
+<h2 is-upgraded>4.2 Cloud Shell の起動</h2>
+<p>各種コマンドを実行するための CLI 環境である Cloud Shell を開きます。下図の中のリンクをクリックし、Cloud Shell を開きます。</p>
+<p class="image-container"><img alt="Open Cloud Shell" src="img/4f94aafb6b22f1d0.png"></p>
+<h2 is-upgraded>4.3 Google Cloud プロジェクトの設定</h2>
+<p>ハンズオンを実行する対象の Google Cloud プロジェクトを設定します。コマンドの <code>XXXXXXXX</code> の部分を実際のプロジェクト ID に置き換えて実行します。プロジェクト ID は<a href="https://console.cloud.google.com/home/dashboard" target="_blank">ダッシュボード画面</a>のプロジェクト情報カードから確認ができます。</p>
+<pre><code language="language-shell" class="language-shell">export PROJECT_ID=XXXXXXXX
+gcloud config set project ${PROJECT_ID}
+</code></pre>
+<p>実行後、確認メッセージがでてきた場合は承認ボタンをクリックします。</p>
+<p>コマンド実行後に以下の様に Cloud Shell のプロンプトに、黄色の文字でプロジェクト ID が表示されていることを確認します。</p>
+<p class="image-container"><img alt="Prompt with Project ID" src="img/dca00eb61780238e.png"></p>
+<h2 is-upgraded>4.4 作業用ディレクトリの作成、移動</h2>
+<p>ハンズオン用のディレクトリを作成し、そちらに移動します。</p>
+<pre><code language="language-shell" class="language-shell">export HANDSON_DIR=${HOME}/acm-handson-${PROJECT_ID}
+mkdir -p ${HANDSON_DIR} &amp;&amp; cd ${HANDSON_DIR}
+</code></pre>
+<h2 is-upgraded>4.5 ハンズオン利用機能 (API) の有効化</h2>
+<p>Google Cloud では以下のような各種機能を API として提供しており、Google Cloud プロジェクトの作成直後は、ほぼすべての機能が無効化されております。そのため、使いたい機能は事前に有効化する必要があります。ここではアプリケーションをデプロイする対象の GKE、Config Controller に必要な機能群を有効化します。</p>
+<pre><code language="language-shell" class="language-shell">gcloud services enable container.googleapis.com \
+  monitoring.googleapis.com \
+  cloudtrace.googleapis.com \
+  clouddebugger.googleapis.com \
+  cloudprofiler.googleapis.com \
+  sourcerepo.googleapis.com \
+  krmapihosting.googleapis.com \
+  container.googleapis.com \
+  cloudresourcemanager.googleapis.com \
+  &amp;&amp; gcloud beta container hub config-management enable
+</code></pre>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="複数クラスタを Anthos Config Management で管理する" duration="0">
+        <p>以下のような環境を順を追って構築していきます。</p>
+<p class="image-container"><img alt="Handson goal" src="img/77cedd116befa4c8.png"></p>
+<p>この環境のポイントは以下になります。</p>
+<ul>
+<li>本番用に 2 つ、開発用に 1 つのクラスタがある</li>
+<li>本番用、開発用で同じ Git リポジトリを参照する</li>
+<li>本番用、開発用にブランチを分けて、マニフェストを管理する</li>
+<li>本番環境では安全性を考慮し Git の更新が即クラスタへの反映にならないようにする</li>
+</ul>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Google Kubernetes Engine (GKE) クラスタ作成" duration="0">
+        <p>本手順のゴールイメージ</p>
+<p class="image-container"><img alt="Create GKE clusters" src="img/c69cafaab2b52e4b.png"></p>
+<h2 is-upgraded>6.1 GKE クラスタ作成</h2>
+<p>開発環境用の GKE クラスタを 1 つ、本番環境用の GKE クラスタを 2 つ作成します。</p>
+<pre><code language="language-shell" class="language-shell">for cluster_name in dev-cluster01 prod-cluster01 prod-cluster02
+do
+  gcloud container clusters create ${cluster_name} \
+    --workload-pool ${PROJECT_ID}.svc.id.goog \
+    --release-channel regular \
+    --logging=SYSTEM,WORKLOAD \
+    --monitoring=SYSTEM \
+    --machine-type e2-medium \
+    --zone asia-northeast1-b \
+    --async
+done
+</code></pre>
+<p><a href="https://console.cloud.google.com/kubernetes/list/overview" target="_blank">Kubernetes Engine</a> から GUI で確認できます。</p>
+<aside class="warning"><p> 注: 作成完了まで最大 10 分程度かかることがあります。 </p>
+</aside>
+<h2 is-upgraded>6.2 クラスタ作成完了まで待機</h2>
+<p>6.1 のコマンドは非同期実行のためのオプションがついているため、コマンドの成功失敗に関わらず、すぐ結果が返ってきます。</p>
+<p>3 つのクラスタの作成が完了し、稼働状態 (<strong>RUNNING</strong>) になるまで待ちます。</p>
+<pre><code language="language-shell" class="language-shell">watch -n 5 gcloud container clusters list --format &#34;value\(name,status\)&#34;
+</code></pre>
+<p>すべてのクラスタが <strong>RUNNING</strong> になったら、<code>Ctrl-C</code> でコマンドを終了させます。</p>
+<h2 is-upgraded>6.2 クラスタ認証情報の取得</h2>
+<p>Kubernetes の操作には <code>kubectl</code> という CLI を使います。<code>kubectl</code> から作成したクラスタを操作するために認証情報を取得します。</p>
+<pre><code language="language-shell" class="language-shell">for cluster_name in dev-cluster01 prod-cluster01 prod-cluster02
+do
+  gcloud container clusters get-credentials ${cluster_name} --zone=asia-northeast1-b
+done
+</code></pre>
+<h2 is-upgraded>6.3 クラスタ認証名 (コンテキスト) の簡素化</h2>
+<p><code>kubectl</code> では操作対象のクラスタを認証情報も合わせ、<strong>コンテキスト</strong>というもので管理しています。デフォルトでは長いコンテキスト名が付いてしまうため、以降の手順で簡単に指定できるように短い名称に変えます。</p>
+<pre><code language="language-shell" class="language-shell">kubectl config rename-context gke_${PROJECT_ID}_asia-northeast1-b_dev-cluster01 dev01
+kubectl config rename-context gke_${PROJECT_ID}_asia-northeast1-b_prod-cluster01 prod01
+kubectl config rename-context gke_${PROJECT_ID}_asia-northeast1-b_prod-cluster02 prod02
+</code></pre>
+<h2 is-upgraded>6.4 クラスタのフリートへの登録</h2>
+<p><a href="https://cloud.google.com/anthos/multicluster-management/fleets" target="_blank">フリート</a>とはクラスタを論理的に編成するための Google Cloud のコンセプトです。これを使うことでマルチクラスタ機能の使用と管理、複数のシステム間での一貫したポリシーの適用が可能になります。</p>
+<pre><code language="language-shell" class="language-shell">for cluster_name in dev-cluster01 prod-cluster01 prod-cluster02
+do
+  gcloud container hub memberships register ${cluster_name} \
+  --gke-cluster=asia-northeast1-b/${cluster_name} \
+  --enable-workload-identity
+done
+</code></pre>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Git リポジトリ (Cloud Source Repositories) の用意" duration="0">
+        <p>クラスタに適用する設定 (マニフェスト) は <strong>GitOps</strong> の形で集中管理します。そこでマニフェストを格納するための Git リポジトリの作成、権限の設定を行います。</p>
+<aside class="special"><p> Note: ここではハンズオンの環境を Google Cloud のみで実現するために、Cloud Source Repositories を利用しています。GitHub、GitLab など、ご利用中の Git リポジトリを使うことも可能です。 </p>
+</aside>
+<p>本手順のゴールイメージ</p>
+<p class="image-container"><img alt="Create a Git repository" src="img/327528e3b503a753.png"></p>
+<h2 is-upgraded>7.1 Git リポジトリの作成</h2>
+<p>マニフェストを格納するための Git リポジトリを <a href="https://cloud.google.com/source-repositories" target="_blank">Cloud Source Repositories</a> に作成します。</p>
+<pre><code language="language-shell" class="language-shell">gcloud source repos create acm-repo
+</code></pre>
+<h2 is-upgraded>7.2 Git リポジトリの準備</h2>
+<p>作成した Git リポジトリは空になっています。後ほどマニフェストを格納するために <strong>main</strong> ブランチに <strong>README ファイル</strong> を作成しておきます。</p>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR} \
+  &amp;&amp; gcloud source repos clone acm-repo \
+  &amp;&amp; cd acm-repo \
+  &amp;&amp; git checkout -b main \
+  &amp;&amp; echo &#34;# Repository for ACM&#34; &gt; README.md \
+  &amp;&amp; git add . \
+  &amp;&amp; git commit -m &#39;add readme&#39; \
+  &amp;&amp; git push origin main \
+  &amp;&amp; cd ..
+</code></pre>
+<p>下記コマンドで出力された URL から GUI にアクセスできます。</p>
+<pre><code language="language-shell" class="language-shell">echo https://source.cloud.google.com/${PROJECT_ID}/acm-repo/+/main
+</code></pre>
+<h2 is-upgraded>7.2 Config Sync 用サービスアカウントの作成</h2>
+<p>Config Sync は Cloud Source Repositories からマニフェストを読み取るために権限が必要です。ここでは専用のサービスアカウントを作成します。</p>
+<pre><code language="language-shell" class="language-shell">gcloud iam service-accounts create acm-sync \
+  --description=&#34;Service account for Config Sync&#34; \
+  --display-name=&#34;acm-sync&#34;
+</code></pre>
+<h2 is-upgraded>7.3 作成したサービスアカウントに権限を付与</h2>
+<p>サービスアカウントは作成しただけでは権限を持っていません。Cloud Source Repositories への読み取り権限を付与します。</p>
+<pre><code language="language-shell" class="language-shell">gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+  --member=&#34;serviceAccount:acm-sync@${PROJECT_ID}.iam.gserviceaccount.com&#34; \
+  --role=&#34;roles/source.reader&#34;
+</code></pre>
+<h2 is-upgraded>7.4 Google Cloud サービスアカウントと Kubernetes サービスアカウントの紐付け</h2>
+<p><a href="https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity" target="_blank">Workload Identity</a> を使い、先程作成したサービスアカウントを Config Sync が利用する Kubernetes サービスアカウントと紐付けます。これにより、Config Sync が Cloud Source Repositories にあるマニフェストを読み取ることができるようになります。</p>
+<pre><code language="language-shell" class="language-shell">gcloud iam service-accounts add-iam-policy-binding \
+  --role roles/iam.workloadIdentityUser \
+  --member &#34;serviceAccount:${PROJECT_ID}.svc.id.goog[config-management-system/root-reconciler]&#34; \
+  acm-sync@${PROJECT_ID}.iam.gserviceaccount.com
+</code></pre>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Config Sync, Policy Controller のインストール" duration="0">
+        <p>本手順のゴールイメージ</p>
+<p class="image-container"><img alt="Install Config Sync and Policy Controller" src="img/fdaae5e907caad0a.png"></p>
+<h2 is-upgraded>8.1 設定ファイルの用意</h2>
+<p>Config Sync, Policy Controller は設定ファイルを使い、クラスタごとにインストールします。どのような設定ができるかは、<a href="https://cloud.google.com/anthos-config-management/docs/reference/gcloud-apply-fields" target="_blank">gcloud apply spec フィールド</a> をご確認ください。</p>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR} \
+  &amp;&amp; cat &lt;&lt; EOF &gt; apply-spec.yaml
+applySpecVersion: 1
+spec:
+  configSync:
+    # Config Sync の有効化
+    enabled: true
+    # Git リポジトリ内のコード形式 (非構造化)
+    sourceFormat: unstructured
+    # Sync 対象の Git リポジトリ
+    syncRepo: https://source.developers.google.com/p/${PROJECT_ID}/r/acm-repo
+    # Sync 対象のブランチ名
+    syncBranch: main
+    # Sync 対象のリビジョン
+    syncRev: HEAD
+    # Git リポジトリとの認証方法 (Workload Identity から Service Account を利用)
+    secretType: gcpserviceaccount
+    # Service Account のメールアドレスを指定
+    gcpServiceAccountEmail: acm-sync@${PROJECT_ID}.iam.gserviceaccount.com
+    # Sync 対象のディレクトリ
+    policyDir: /
+    # Config Sync により設定されたリソースの上書きを許可するか (デフォルトは False)
+    preventDrift: false
+  policyController:
+    # Policy Controller の有効化
+    enabled: true
+    # 全ての拒否動作と Dryrun での失敗をログ対象とするか (デフォルトは False)
+    logDeniesEnabled: true
+EOF
+</code></pre>
+<h2 is-upgraded>8.2 Config Sync, Policy Controller のインストール</h2>
+<p>3 つのクラスタ全てで同じ設定を使い、Config Sync、Policy Controller をインストールします。</p>
+<pre><code language="language-shell" class="language-shell">for cluster_name in dev-cluster01 prod-cluster01 prod-cluster02
+do
+  gcloud beta container hub config-management apply \
+    --membership=${cluster_name} \
+    --config=./apply-spec.yaml
+done
+</code></pre>
+<h2 is-upgraded>8.3 インストール確認</h2>
+<p>Config Sync, Policy Controller がインストールされ、稼働状態になるまで待ちます。</p>
+<pre><code language="language-shell" class="language-shell">watch -n 5 gcloud beta container hub config-management status
+</code></pre>
+<p>すべてのクラスタの Status が <strong>SYNCED</strong>、Policy_Controller が <strong>INSTALLED</strong> になったら、<code>Ctrl-C</code> でコマンドを終了させます。 <a href="https://console.cloud.google.com/kubernetes/config_management" target="_blank">Kubernetes Engine - 構成管理</a> から GUI でも確認できます。</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Config Sync を利用した GKE クラスタの設定" duration="0">
+        <p>本手順のゴールイメージ</p>
+<p class="image-container"><img alt="Configure clusters with Config Sync" src="img/6d4e7372dc809719.png"></p>
+<h2 is-upgraded>9.1 Sync 対象のディレクトリに移動</h2>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR}/acm-repo
+</code></pre>
+<h2 is-upgraded>9.2 Namespace と権限の作成</h2>
+<p>accountservice という名前空間、またその名前空間内の Pod を閲覧する権限、それを Google グループに付与する設定を作成します。</p>
+<pre><code language="language-shell" class="language-shell">cat &lt;&lt; EOF &gt; namespace.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: accountservice
+EOF
+cat &lt;&lt; EOF &gt; accountservice.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: accountservice
+  name: pod-reader
+rules:
+- apiGroups: [&#34;&#34;]
+  resources: [&#34;pods&#34;]
+  verbs: [&#34;get&#34;, &#34;watch&#34;, &#34;list&#34;]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: pod-reader-binding
+  namespace: accountservice
+subjects:
+# Google Group
+- kind: Group
+  name: accountservice-ro-group@example.com
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+EOF
+</code></pre>
+<h2 is-upgraded>9.3 Git へのプッシュ</h2>
+<p>作成した設定ファイルを Git リポジトリにプッシュします。</p>
+<pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;add accountservice.yaml&#39; &amp;&amp; git push origin main
+</code></pre>
+<h2 is-upgraded>9.4 クラスタへのデプロイの確認 (kubectl)</h2>
+<p>開発用クラスタの名前空間一覧を確認します。<strong>accountservice</strong> が作成されるまで待ちます。</p>
+<pre><code language="language-shell" class="language-shell">kubectl get namespace --context dev01 --watch
+</code></pre>
+<p>名前空間 accountservice が作られたら <code>Ctrl-C</code> でコマンドを終了させます。</p>
+<p><code>--context</code> の引数を本番クラスタ (prod01, prod02) の指定に変え、実行してみてください。開発クラスタと同じように名前空間が作られているはずです。</p>
+<h2 is-upgraded>9.5 クラスタへのデプロイの確認 (nomos)</h2>
+<p>ACM では複数のクラスタを管理する CLI として <code>nomos</code> が用意されています。これを使うことで、複数のクラスタの状況、Config Sync により管理されているリソースを一覧化して見ることができます。</p>
+<p>以下のコマンドは、3 クラスタすべての情報を 1 秒おきに表示します。</p>
+<pre><code language="language-shell" class="language-shell">nomos status --contexts dev01,prod01,prod02 --poll 1s
+</code></pre>
+<p>確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
+<h2 is-upgraded>9.6 手動で作成したリソースを削除し、自動で復旧することを確認 (差分の解消)</h2>
+<pre><code language="language-shell" class="language-shell">kubectl delete -f accountservice.yaml --context dev01 \
+  &amp;&amp; nomos status --contexts dev01,prod01,prod02 --poll 1s
+</code></pre>
+<p>Git で定義されているあるべき状態と、現在の差分が検出され、自動的に修正 (削除したものが再作成) されます。確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
+<h2 is-upgraded>9.7 Git リポジトリからリソースを削除、クラスタに反映されることを確認</h2>
+<p>Git から名前空間を除くリソースを削除します。すべてのクラスタからリソースが削除されることを確認します。</p>
+<pre><code language="language-shell" class="language-shell">git rm accountservice.yaml &amp;&amp; git commit -m &#39;delete accountservice.yaml&#39; &amp;&amp; git push origin main \
+  &amp;&amp; nomos status --contexts dev01,prod01,prod02 --poll 1s
+</code></pre>
+<p>確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
+<p>Config Sync ではリソースの誤削除を防ぐため、一度のコミットですべての名前空間、リソースを削除することができないようになっています。そのため、本手順でリソースを、次の手順で名前空間を削除するようにしています。<a href="https://cloud.google.com/anthos-config-management/docs/reference/errors#knv2006" target="_blank">KNV2006: Config Management Erros</a></p>
+<h2 is-upgraded>9.8 Git リポジトリから名前空間リソースを削除、クラスタに反映されることを確認</h2>
+<p>Git から名前空間リソースを削除します。すべてのクラスタから名前空間が削除されることを確認します。</p>
+<pre><code language="language-shell" class="language-shell">git rm namespace.yaml &amp;&amp; git commit -m &#39;delete namespace.yaml&#39; &amp;&amp; git push origin main \
+  &amp;&amp; nomos status --contexts dev01,prod01,prod02 --poll 1s
+</code></pre>
+<p>確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="本番、開発クラスタで Sync するブランチを分ける" duration="0">
+        <p>ここまで 3 クラスタすべてが同じ Git リポジトリ、ブランチを参照しており、同じ設定が適用されていました。現実では本番、開発では異なる設定となることがほとんどです。</p>
+<p>今回のハンズオンでは Git リポジトリは同じものを参照し、ブランチで本番、開発を区別することとします。</p>
+<p>本手順のゴールイメージ</p>
+<p class="image-container"><img alt="Point per branch" src="img/40308a89fd451343.png"></p>
+<h2 is-upgraded>10.1 本番、開発用の設定ファイルを作成</h2>
+<p>参照するブランチを <strong>prod</strong>, <strong>dev</strong> に修正したファイルを作成します。</p>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR}
+cat apply-spec.yaml | sed -e &#39;s/syncBranch: main/syncBranch: prod/&#39; -e &#39;s/preventDrift: false/preventDrift: true/&#39; -e &#39;5s/enabled: true/enabled: false/&#39; &gt; apply-spec-prod.yaml
+cat apply-spec.yaml | sed -e &#39;s/syncBranch: main/syncBranch: dev/&#39; &gt; apply-spec-dev.yaml
+</code></pre>
+<h2 is-upgraded>10.2 本番用、開発用の Git ブランチを作成</h2>
+<p>Git リポジトリにはまだ参照するブランチが作成されていません。<strong>prod</strong>, <strong>dev</strong> のブランチを作成します。</p>
+<pre><code language="language-shell" class="language-shell">cd acm-repo \
+  &amp;&amp; git checkout -b prod \
+  &amp;&amp; git push origin prod \
+  &amp;&amp; git checkout -b dev \
+  &amp;&amp; git push origin dev \
+  &amp;&amp; cd ..
+</code></pre>
+<h2 is-upgraded>10.3 Config Sync の設定変更</h2>
+<p>先程作成した、本番用、開発用で参照するブランチを分けた設定ファイルを適用します。</p>
+<p>本番用クラスタ (Config Sync を一度停止する)</p>
+<pre><code language="language-shell" class="language-shell">for num in 01 02
+do
+  gcloud beta container hub config-management apply \
+    --membership=prod-cluster${num} \
+    --config=./apply-spec-prod.yaml
+done
+</code></pre>
+<p>開発用クラスタ</p>
+<pre><code language="language-shell" class="language-shell">gcloud beta container hub config-management apply \
+  --membership=dev-cluster01 \
+  --config=./apply-spec-dev.yaml
+</code></pre>
+<p><strong>注</strong>: 本番環境では <a href="https://cloud.google.com/anthos-config-management/docs/how-to/prevent-config-drift" target="_blank">構成ファイルのドリフト防止</a> 機能を有効化しようとしています。有効化には一度 Config Sync を止め、再度起動させる必要があります。</p>
+<h2 is-upgraded>10.4 本番環境の Config Sync を再度有効化する</h2>
+<pre><code language="language-shell" class="language-shell">sed -i -e &#39;s/enabled: false/enabled: true&#39; apply-spec-prod.yaml
+</code></pre>
+<pre><code language="language-shell" class="language-shell">for num in 01 02
+do
+  gcloud beta container hub config-management apply \
+    --membership=prod-cluster${num} \
+    --config=./apply-spec-prod.yaml
+done
+</code></pre>
+<h2 is-upgraded>10. 設定が反映されたことを確認</h2>
+<p>参照ブランチが変わったことを <code>nomos</code> コマンドで確認します。</p>
+<pre><code language="language-shell" class="language-shell">nomos status --contexts dev01,prod01,prod02 --poll 1s
+</code></pre>
+<p>確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
+<aside class="special"><p> Note: 本番環境で利用する場合、Git リポジトリでのセキュリティ設定も重要となります。例えば今回のようにブランチを分けた場合、本番用ブランチでは操作できるメンバーを絞る、直接プッシュを防ぐ、レビューの Approval 無しにマージさせないなどの保護設定が必要です。 </p>
+</aside>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="安全なロールアウト" duration="0">
+        <p>本番用に 2 クラスタありますが、同じブランチを参照しており、Git リポジトリが更新されるとすぐに設定が反映されます (デフォルトで HEAD が指定されているため)。ここではより安全に参照する <strong>リビジョン</strong> を指定することで Git リポジトリの更新とは分けて、クラスタ設定を管理します。</p>
+<p>本手順のゴールイメージ</p>
+<p class="image-container"><img alt="Point specific revisions" src="img/15631154f4c771a4.png"></p>
+<h2 is-upgraded>11.1 Sync 対象のディレクトリに移動し、本番用クラスタのブランチ (prod) に切り替え</h2>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR}/acm-repo &amp;&amp; git checkout prod
+</code></pre>
+<h2 is-upgraded>11.2 今適用されているリビジョン (ハッシュ値) を取得</h2>
+<p>今 Sync されているリビジョン (HEAD) のハッシュ値を取得します。</p>
+<pre><code language="language-shell" class="language-shell">REVISION=$(git rev-parse HEAD)
+</code></pre>
+<h2 is-upgraded>11.3 リビジョンを固定した設定ファイルを作成</h2>
+<p>リビジョンを固定した設定ファイルを作成します。</p>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR} &amp;&amp; cat apply-spec-prod.yaml \
+  | sed -e &#34;s/syncRev: HEAD/syncRev: ${REVISION}/&#34; \
+  &gt; apply-spec-prod-rev.yaml
+</code></pre>
+<h2 is-upgraded>11.4 Config Sync の設定変更</h2>
+<p>Config Sync の設定を更新し、本番クラスタの参照リビジョンを固定します。</p>
+<pre><code language="language-shell" class="language-shell">for num in 01 02
+do
+  gcloud beta container hub config-management apply \
+    --membership=prod-cluster${num} \
+    --config=./apply-spec-prod-rev.yaml
+done
+</code></pre>
+<h2 is-upgraded>11.5 設定が反映されたことを確認</h2>
+<p>参照リビジョンが変わったことを <code>nomos</code> コマンドで確認します。</p>
+<pre><code language="language-shell" class="language-shell">nomos status --contexts prod01,prod02 --poll 1s
+</code></pre>
+<p>確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
+<p>これで本番用クラスタ 01, 02 が特定のリビジョンに固定されました。こうすることで Git リポジトリに反映された設定をクラスタ個別に反映させることが可能になりました。</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="本番用クラスタごとの設定" duration="0">
+        <p>本手順のゴールイメージ</p>
+<p class="image-container"><img alt="Configure specific cluster" src="img/bfe55d7311836286.png"></p>
+<h2 is-upgraded>12.1 Namespace の作成</h2>
+<p>productionservice という名前空間を作成します。</p>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR}/acm-repo \
+  &amp;&amp; cat &lt;&lt; EOF &gt; accountservice.yaml
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: accountservice
+EOF
+</code></pre>
+<h2 is-upgraded>12.2 Git へのプッシュ</h2>
+<p>作成した設定ファイルを Git リポジトリにプッシュします。</p>
+<pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;add accountservice.yaml&#39; \
+  &amp;&amp; git push origin prod
+</code></pre>
+<h2 is-upgraded>12.3 最新リビジョン (ハッシュ値) を取得</h2>
+<p>最新のリビジョン (HEAD) のハッシュ値を取得します。</p>
+<pre><code language="language-shell" class="language-shell">REVISION=$(git rev-parse HEAD)
+</code></pre>
+<h2 is-upgraded>12.4 設定ファイルのリビジョンを更新</h2>
+<p>設定ファイルに記載されている参照リビジョンを更新します。</p>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR} &amp;&amp; \
+  sed -i -e &#34;s/syncRev: .*$/syncRev: ${REVISION}/&#34; apply-spec-prod-rev.yaml
+</code></pre>
+<h2 is-upgraded>12.5 Config Sync の設定変更 (本番用クラスタ 01)</h2>
+<p>Config Sync の設定を更新し、本番クラスタ 01 のみ参照リビジョンを固定します。</p>
+<pre><code language="language-shell" class="language-shell">gcloud beta container hub config-management apply \
+  --membership=prod-cluster01 \
+  --config=./apply-spec-prod-rev.yaml \
+  &amp;&amp; nomos status --contexts prod01,prod02 --poll 1s
+</code></pre>
+<p>本番用クラスタ 01, 02 で異なるリビジョンが適用されることを確認します。確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
+<h2 is-upgraded>12.6 手動でのリソース削除</h2>
+<p>Config Sync で作成されたリソースを手動で削除します。</p>
+<pre><code language="language-shell" class="language-shell">kubectl delete namespace accountservice --context prod01
+</code></pre>
+<p>Config Sync で管理されているリソースを修正しようとしたので、拒否されるはずです。 これは Config Sync の Admission Webhook により実現されています。</p>
+<p>開発用のクラスタでは preventDrift のパラメータが false に設定していたため、手動での操作自体は拒否されず、操作後自動的に修正されていました。</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="その他の環境管理の方法" duration="0">
+        <p>今回は開発、本番の 2 環境、そしてそれぞれの環境は設定が同一という前提で以下の要素を使い、クラスタ設定を制御しました。</p>
+<ul>
+<li>Git ブランチ</li>
+<li>Git リビジョン</li>
+</ul>
+<p>Git, Config Sync では上記に加え下記のような要素を使い、クラスタに適用する設定を制御することができます。</p>
+<ul>
+<li>Git リポジトリ</li>
+<li>Sync 対象のディレクトリ</li>
+<li><a href="https://cloud.google.com/anthos-config-management/docs/how-to/clusterselectors" target="_blank">クラスタセレクタ</a>  <ul>
+<li>マニフェストを適用するクラスタをマニフェストの中で指定</li>
+</ul>
+</li>
+<li><a href="https://cloud.google.com/anthos-config-management/docs/how-to/namespace-scoped-objects" target="_blank">名前空間セレクタ</a>  <ul>
+<li>マニフェストを適用する名前空間をマニフェストの中で指定</li>
+</ul>
+</li>
+</ul>
+<p>また今回は 1 クラスタが参照する Git リポジトリが 1 つでしたが、複数のリポジトリ (正しくは、クラスタ全体設定用に 1 つ、各名前空間ごとに 1 つずつ) を参照するように構成することも可能です。詳しくは <a href="https://cloud.google.com/anthos-config-management/docs/how-to/namespace-repositories" target="_blank">名前空間リポジトリからの同期を構成する</a> をご確認ください。</p>
+<p>それぞれの要素の使い分けなどは <a href="https://cloud.google.com/architecture/safe-rollouts-with-anthos-config-management" target="_blank">Anthos Config Management を使用した安全なロールアウト</a> をご確認ください。</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Policy Controller を使い GKE クラスタに「ガードレール」を設定する" duration="0">
+        <h2 is-upgraded>Policy Controller とは？</h2>
+<p><a href="https://cloud.google.com/anthos-config-management/docs/concepts/policy-controller" target="_blank">Policy Controller</a> は、Kubernetes の API に対する操作に対しポリシーを設定することができます。</p>
+<p>Config Sync により GitOps でリソースの一元管理を実現できましたが、リソースをどのように作るべきか、何を作らせるべきかなどの制限は入っていませんでした。そのような各種制限を設定、そして強制する機能が Policy Controller で「セキュリティガードレール」として機能します。</p>
+<p>この機能を利用することで以下のようなことが可能になります。</p>
+<ul>
+<li>リソースの利用者を識別するために、team ラベルの付与を必須とする</li>
+<li>開発者が default 名前空間を利用するのを禁止する</li>
+<li>Kubernetes のセキュリティベンチマーク <a href="https://cloud.google.com/kubernetes-engine/docs/concepts/cis-benchmarks#cis_kubernetes_benchmark" target="_blank">CIS Kubernetes Benchmark</a> を適用する</li>
+</ul>
+<p class="image-container"><img alt="Policy Controller" src="img/c977aeec74052664.png"></p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Policy を活用する" duration="0">
+        <p>手順 8 で Policy Controller は各クラスタにインストール済みです。その中で自動的に有用なポリシーテンプレートも導入されます。インストールされるテンプレート一覧は <a href="https://cloud.google.com/anthos-config-management/docs/reference/constraint-template-library#gcpstoragelocationconstraintv1" target="_blank">制約テンプレートライブラリ</a> をご確認ください。</p>
+<p>ここではそれらのテンプレートを活用して、3 つセキュリティガードレールを追加します。</p>
+<ul>
+<li>開発用クラスタ  <ul>
+<li>レプリカ数の上限を設定</li>
+</ul>
+</li>
+<li>本番用クラスタ  <ul>
+<li>default ネームスペースへのアプリケーション作成</li>
+<li>readness Probe, liveness Probe の設定を強制</li>
+</ul>
+</li>
+</ul>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="レプリカ数の上限を設定 (開発用クラスタ)" duration="0">
+        <p>テンプレートライブラリで提供されている <a href="https://cloud.google.com/anthos-config-management/docs/reference/constraint-template-library#k8sreplicalimits" target="_blank">K8sReplicaLimits</a> を利用して、開発用クラスタでのレプリカ数上限を 3 に設定します。</p>
+<h2 is-upgraded>16.1 Sync 対象のディレクトリに移動し、開発用クラスタのブランチ (dev) に切り替え</h2>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR}/acm-repo &amp;&amp; git checkout dev
+</code></pre>
+<h2 is-upgraded>16.2 ポリシーを作成</h2>
+<pre><code language="language-shell" class="language-shell">cat &lt;&lt; EOF &gt; replica_limit.yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sReplicaLimits
+metadata:
+  name: replica-limits
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+    - apiGroups:
+      - apps
+      kinds:
+      - Deployment
+  parameters:
+    ranges:
+    - max_replicas: 3
+EOF
+</code></pre>
+<h2 is-upgraded>16.3 Git へのプッシュ</h2>
+<p>作成したポリシーを Git リポジトリにプッシュし、反映を確認します。</p>
+<pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;add replica limit policy for development&#39; &amp;&amp; git push origin dev \
+  &amp;&amp; nomos status --contexts dev01 --poll 1s
+</code></pre>
+<p>反映を確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
+<h2 is-upgraded>16.4 レプリカ数を 4 にした Deployment を作成</h2>
+<pre><code language="language-shell" class="language-shell">kubectl create deployment nginx-4 --image nginx --replicas 4 --context dev01
+</code></pre>
+<h2 is-upgraded>16.5 監査結果の表示</h2>
+<p>手順 15.3 で作成したポリシーは dryrun モード (enforcementAction 項目) で設定していました。そのためポリシー違反の設定は拒否ではなく、監視されます。ポリシー違反が検出されているかを確認します。</p>
+<pre><code language="language-shell" class="language-shell">kubectl get K8sReplicaLimits replica-limits -o yaml --context dev01
+</code></pre>
+<p>出力結果の最下部に <strong>violations</strong> としてポリシー違反の Deployment が表示されていることを確認します。</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="default ネームスペースの利用を制限 (本番用クラスタ)" duration="0">
+        <p><a href="https://cloud.google.com/anthos-config-management/docs/reference/constraint-template-library#k8srestrictnamespaces" target="_blank">K8sRectrictNamespaces</a> ポリシーを使うことで、名前空間の利用を制限できます。</p>
+<p>ここではサービスで通常利用しないほうが良い default の名前空間の利用を制限します。</p>
+<h2 is-upgraded>17.1 Sync 対象のディレクトリに移動し、本番用クラスタのブランチ (prod) に切り替え</h2>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR}/acm-repo &amp;&amp; git checkout prod
+</code></pre>
+<h2 is-upgraded>17.2 ポリシーを作成</h2>
+<pre><code language="language-shell" class="language-shell">cat &lt;&lt; EOF &gt; restrict-default-namespace.yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRestrictNamespaces
+metadata:
+  name: restrict-default-namespace
+spec:
+  match:
+    kinds:
+      - apiGroups: [&#34;apps&#34;]
+        kinds: [&#34;Deployment&#34;,&#34;Pod&#34;,&#34;ReplicaSet&#34;]
+  enforcementAction: deny
+  parameters:
+    restrictedNamespaces:
+    - default
+EOF
+</code></pre>
+<h2 is-upgraded>17.3 Git へのプッシュ</h2>
+<p>作成したポリシーを Git リポジトリにプッシュします。</p>
+<pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;restrict default namespace for production&#39; \
+  &amp;&amp; git push origin prod
+</code></pre>
+<aside class="special"><p> Note: 本番クラスタは参照リビジョンを固定しているため、ポリシーを適用するには Config Sync の設定を更新する必要があります。 </p>
+</aside>
+<h2 is-upgraded>17.4 今適用されているリビジョン (ハッシュ値) を取得</h2>
+<p>更新が含まれているリビジョン (HEAD) のハッシュ値を取得します。</p>
+<pre><code language="language-shell" class="language-shell">REVISION=$(git rev-parse HEAD)
+</code></pre>
+<h2 is-upgraded>17.5 リビジョンを固定した設定ファイルを作成</h2>
+<p>リビジョンを固定した設定ファイルを作成します。</p>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR} &amp;&amp; cat apply-spec-prod-rev.yaml \
+  | sed -e &#34;s/syncRev: .*$/syncRev: ${REVISION}/&#34; \
+  &gt; apply-spec-prod-rev-17.yaml
+</code></pre>
+<h2 is-upgraded>17.6 本番クラスタ 01 にポリシーを反映</h2>
+<p>Config Sync の設定を更新し、本番クラスタ 01 にポリシーを反映します。</p>
+<pre><code language="language-shell" class="language-shell">gcloud beta container hub config-management apply \
+  --membership=prod-cluster01 \
+  --config=./apply-spec-prod-rev-17.yaml \
+  &amp;&amp; nomos status --contexts prod01 --poll 1s
+</code></pre>
+<p>restrict-default-namespace リソースが Sync されたら、<code>Ctrl-C</code> でコマンドを終了させます。</p>
+<h2 is-upgraded>17.7 Deployment を default ネームスペースに作成</h2>
+<pre><code language="language-shell" class="language-shell">kubectl create deployment nginx --image nginx --replicas 4 --context prod01
+</code></pre>
+<aside class="warning"><p> 手順 17.2 で作成したポリシーは deny モード (enforcementAction 項目) で設定しました。そのためポリシー違反の設定は作成が拒否されます。 </p>
+</aside>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="readiness Probe, liveness Probe の設定を強制 (本番用クラスタ)" duration="0">
+        <p><a href="https://cloud.google.com/anthos-config-management/docs/reference/constraint-template-library#k8srequiredprobes" target="_blank">K8sRequiredProbes</a> ポリシーを使うことで、Pod に readiness Probe または liveness Probe の利用を強制できます。本番用サービスでは、アプリケーションに合わせた Probe を適切に設定することが良いプラクティスです。</p>
+<p>ここでは両方の Probe が設定されていない Pod の作成を制限します。</p>
+<h2 is-upgraded>18.1 ポリシーを作成</h2>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR}/acm-repo \
+  &amp;&amp; cat &lt;&lt; EOF &gt; must-have-probes.yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredProbes
+metadata:
+  name: must-have-probes
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+    - apiGroups:
+      - &#34;&#34;
+      kinds:
+      - Pod
+  parameters:
+    probeTypes:
+    - tcpSocket
+    - httpGet
+    - exec
+    probes:
+    - readinessProbe
+    - livenessProbe
+EOF
+</code></pre>
+<h2 is-upgraded>18.2 Git へのプッシュ</h2>
+<p>作成したポリシーを Git リポジトリにプッシュします。</p>
+<pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;restrict workloads without probes for production&#39; \
+  &amp;&amp; git push origin prod
+</code></pre>
+<aside class="special"><p> Note: 本番クラスタは参照リビジョンを固定しているため、ポリシーを適用するには Config Sync の設定を更新する必要があります。 </p>
+</aside>
+<h2 is-upgraded>18.3 今適用されているリビジョン (ハッシュ値) を取得</h2>
+<p>更新が含まれているリビジョン (HEAD) のハッシュ値を取得します。</p>
+<pre><code language="language-shell" class="language-shell">REVISION=$(git rev-parse HEAD)
+</code></pre>
+<h2 is-upgraded>18.4 リビジョンを固定した設定ファイルを作成</h2>
+<p>リビジョンを固定した設定ファイルを作成します。</p>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR} &amp;&amp; cat apply-spec-prod-rev-16.yaml \
+  | sed -e &#34;s/syncRev: .*$/syncRev: ${REVISION}/&#34; \
+  &gt; apply-spec-prod-rev-18.yaml
+</code></pre>
+<h2 is-upgraded>18.5 本番クラスタ 01 にポリシーを反映</h2>
+<p>Config Sync の設定を更新し、本番クラスタ 01 にポリシーを反映します。</p>
+<pre><code language="language-shell" class="language-shell">gcloud beta container hub config-management apply \
+  --membership=prod-cluster01 \
+  --config=./apply-spec-prod-rev-18.yaml \
+  &amp;&amp; nomos status --contexts prod01 --poll 1s
+</code></pre>
+<p>must-have-probes リソースが Sync されたら、<code>Ctrl-C</code> でコマンドを終了させます。</p>
+<h2 is-upgraded>18.6 Probe 設定がない Pod を service1 ネームスペースに作成</h2>
+<pre><code language="language-shell" class="language-shell">kubectl create namespace service1 --context prod01 \
+  &amp;&amp; kubectl run nginx-without-probes --image nginx -n service1 --context prod01
+</code></pre>
+<aside class="warning"><p> 前のセクションと同様にポリシーは deny モード (enforcementAction 項目) で設定しました。そのためポリシー違反のリソースは作成が拒否されます。 </p>
+</aside>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Config Controller" duration="0">
+        <h2 is-upgraded>Config Controller とは？</h2>
+<p><a href="https://cloud.google.com/anthos-config-management/docs/concepts/config-controller-overview" target="_blank">Config Controller</a> は Google Cloud リソースのプロビジョニングとオーケストレーション (わかりやすく言うと IaC を実現します) を行うホスト型サービスです。本サービスにより、Google Cloud の環境を Kubernetes Resource Model で構築、管理できます。</p>
+<p>Config Controller は下記 3 つのコンポーネントで構築されています。</p>
+<ul>
+<li>Config Sync</li>
+<li>Policy Controller</li>
+<li>Config Connector</li>
+</ul>
+<p>Config Connector が KRM を Google Cloud のリソースに変換し作成する機能を担っています。Config Sync, Policy Controller により、Google Cloud のリソース管理機能に、GitOps、セキュリティガードレールが追加されています。</p>
+<p class="image-container"><img alt="KRM with Config Controller" src="img/e1085d15e0a33f95.png"></p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Config Controller の設定" duration="0">
+        <h2 is-upgraded>20.1 Config Controller を作成</h2>
+<pre><code language="language-shell" class="language-shell">gcloud anthos config controller create config-controller01 \
+  --location=us-central1 --async
+</code></pre>
+<aside class="warning"><p> 注: 2022 年 3 月現在 Config Controller は us-central1 (アイオワ), us-east1 (サウスカロライナ) リージョンでのみの展開となっています。また作成完了まで 15 分以上かかることがあります。 </p>
+</aside>
+<h2 is-upgraded>20.2 Config Controller の作成完了を確認</h2>
+<pre><code language="language-shell" class="language-shell">watch -n 5 gcloud anthos config controller list --location us-central1
+</code></pre>
+<p>作成が完了 (STATE が <strong>RUNNING</strong>) したら、<code>Ctrl-C</code> でコマンドを終了させます。</p>
+<h2 is-upgraded>20.3 Config Controller クラスタ認証情報の取得</h2>
+<p>Config Controller は GKE クラスタにホストされた形で提供されます。作成したクラスタを CLI (kubectl) から操作するために認証情報を取得します。</p>
+<pre><code language="language-shell" class="language-shell">gcloud anthos config controller get-credentials config-controller01 \
+  --location us-central1
+</code></pre>
+<h2 is-upgraded>20.4 Config Controller に権限を付与</h2>
+<p>Config Controller は Google Cloud のリソースを作成、管理します。そのため、それらを実行するための権限を付与する必要があります。</p>
+<pre><code language="language-shell" class="language-shell">export SA_EMAIL=&#34;$(kubectl get ConfigConnectorContext -n config-control \
+    -o jsonpath=&#39;{.items[0].spec.googleServiceAccount}&#39; 2&gt; /dev/null)&#34;
+gcloud projects add-iam-policy-binding &#34;${PROJECT_ID}&#34; \
+    --member &#34;serviceAccount:${SA_EMAIL}&#34; \
+    --role &#34;roles/owner&#34;
+</code></pre>
+<aside class="warning"><p> 注: ここではプロジェクトの Owner 権限を付与しています。Config Controller から操作したいリソースが事前に分かっている場合はより絞った権限を付与することも可能です。 </p>
+</aside>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Config Controller の GitOps 設定" duration="0">
+        <p>Config Controller には Config Sync が含まれており、簡単に GitOps でリソースを管理することができます。</p>
+<aside class="special"><p> Note: 手順 7 では Cloud Source Repositories などの設定を `gcloud` コマンドから行っていました。本手順では Google Cloud リソースの設定を Conig Controller の機能 (KRM でリソースを作成、管理する) を使って行っています。 </p>
+</aside>
+<h2 is-upgraded>21.1 Config Controller 用 Git リポジトリ用マニフェスト作成</h2>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR} \
+  &amp;&amp; cat &lt;&lt; EOF &gt; cc-repo.yaml
+apiVersion: sourcerepo.cnrm.cloud.google.com/v1beta1
+kind: SourceRepoRepository
+metadata:
+  name: config-controller-repo
+  namespace: config-control
+EOF
+</code></pre>
+<h2 is-upgraded>21.2 Config Controller 用 Git リポジトリ作成</h2>
+<pre><code language="language-shell" class="language-shell">kubectl apply -f cc-repo.yaml
+</code></pre>
+<h2 is-upgraded>21.3 Git リポジトリの準備</h2>
+<p>作成した Git リポジトリは空になっています。後ほどマニフェストを格納するために <strong>main</strong> ブランチに <strong>README ファイル</strong> を作成しておきます。</p>
+<pre><code language="language-shell" class="language-shell">gcloud source repos clone config-controller-repo \
+  &amp;&amp; cd config-controller-repo \
+  &amp;&amp; git checkout -b main \
+  &amp;&amp; echo &#34;# Repository for Config Controller&#34; &gt; README.md \
+  &amp;&amp; git add . \
+  &amp;&amp; git commit -m &#39;add readme&#39; \
+  &amp;&amp; git push origin main
+</code></pre>
+<h2 is-upgraded>21.4 GitOps 用の IAM 設定ファイルを作成</h2>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR} \
+  &amp;&amp; cat &lt;&lt; EOF &gt; gitops-iam.yaml
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMServiceAccount
+metadata:
+  name: config-sync-sa
+  namespace: config-control
+spec:
+  displayName: ConfigSync
+---
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMPolicyMember
+metadata:
+  name: config-sync-wi
+  namespace: config-control
+spec:
+  member: serviceAccount:${PROJECT_ID}.svc.id.goog[config-management-system/root-reconciler]
+  role: roles/iam.workloadIdentityUser
+  resourceRef:
+    apiVersion: iam.cnrm.cloud.google.com/v1beta1
+    kind: IAMServiceAccount
+    name: config-sync-sa
+---
+apiVersion: iam.cnrm.cloud.google.com/v1beta1
+kind: IAMPolicyMember
+metadata:
+  name: allow-configsync-sa-read-csr
+  namespace: config-control
+spec:
+  member: serviceAccount:config-sync-sa@${PROJECT_ID}.iam.gserviceaccount.com
+  role: roles/source.reader
+  resourceRef:
+    apiVersion: resourcemanager.cnrm.cloud.google.com/v1beta1
+    kind: Project
+    external: projects/${PROJECT_ID}
+EOF
+</code></pre>
+<h2 is-upgraded>21.5 GitOps 用 IAM 設定の適用</h2>
+<pre><code language="language-shell" class="language-shell">kubectl apply -f gitops-iam.yaml
+</code></pre>
+<h2 is-upgraded>21.6 Config Sync, Policy Controller 設定ファイルの用意</h2>
+<pre><code language="language-shell" class="language-shell">cat &lt;&lt; EOF &gt; apply-spec-config-controller.yaml
+apiVersion: configmanagement.gke.io/v1
+kind: ConfigManagement
+metadata:
+  name: config-management
+spec:
+  enableMultiRepo: true
+  enableLegacyFields: true
+  policyController:
+    enabled: true
+  clusterName: krmapihost-config-controller01
+  git:
+    policyDir: /
+    secretType: gcpserviceaccount
+    gcpServiceAccountEmail: config-sync-sa@${PROJECT_ID}.iam.gserviceaccount.com
+    syncBranch: main
+    syncRepo: https://source.developers.google.com/p/${PROJECT_ID}/r/config-controller-repo
+  sourceFormat: unstructured
+EOF
+</code></pre>
+<h2 is-upgraded>21.7 Config Sync, Policy Controller のインストール</h2>
+<pre><code language="language-shell" class="language-shell">kubectl apply -f apply-spec-config-controller.yaml
+</code></pre>
+<h2 is-upgraded>21.8 インストール確認</h2>
+<p>Config Sync, Policy Controller がインストールされ、稼働状態になるまで待ちます。</p>
+<pre><code language="language-shell" class="language-shell">nomos status --contexts $(kubectl config current-context) --poll 5s
+</code></pre>
+<p>クラスタの状態が <strong>SYNCED</strong> になったら<code>Ctrl-C</code> でコマンドを終了させます。</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="Config Controller を使った Google Cloud リソースの作成" duration="0">
+        <h2 is-upgraded>22.1 Cloud Storage 用設定ファイルの作成 (Tokyo リージョン)</h2>
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR}/config-controller-repo \
+  &amp;&amp; cat &lt;&lt; EOF &gt; storage-bucket-tokyo.yaml
+apiVersion: storage.cnrm.cloud.google.com/v1beta1
+kind: StorageBucket
+metadata:
+  annotations:
+    cnrm.cloud.google.com/force-destroy: &#34;false&#34;
+  name: ${PROJECT_ID}-bucket-tokyo
+  namespace: config-control
+spec:
+  storageClass: STANDARD
+  location:	asia-northeast1
+  versioning:
+    enabled: true
+  uniformBucketLevelAccess: true
+EOF
+</code></pre>
+<h2 is-upgraded>22.2 Git へのプッシュ</h2>
+<p>作成したリソース用マニフェストを Git リポジトリにプッシュします。</p>
+<pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;create a storage bucket in Tokyo&#39; \
+  &amp;&amp; git push origin main \
+  &amp;&amp; nomos status --contexts $(kubectl config current-context) --poll 1s
+</code></pre>
+<p>Cloud Storage が作られたら <code>Ctrl-C</code> でコマンドを終了させます。</p>
+<p><a href="https://console.cloud.google.com/storage/browser" target="_blank">Cloud Storage 管理画面</a> から GUI で確認できます。</p>
+<h2 is-upgraded>22.3 Cloud Storage の作成ロケーションを Tokyo リージョンに制限するポリシー作成</h2>
+<pre><code language="language-shell" class="language-shell">cat &lt;&lt; EOF &gt; gcs-tokyo-only.yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: GCPStorageLocationConstraintV1
+metadata:
+  name: tokyo-only
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+    - apiGroups:
+      - storage.cnrm.cloud.google.com
+      kinds:
+      - StorageBucket
+  parameters:
+    locations:
+    - asia-northeast1
+EOF
+</code></pre>
+<h2 is-upgraded>22.4 Git へのプッシュ</h2>
+<p>作成したポリシーを Git リポジトリにプッシュします。</p>
+<pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;restrict bucket creation only in Tokyo&#39; \
+  &amp;&amp; git push origin main \
+  &amp;&amp; nomos status --contexts $(kubectl config current-context) --poll 1s
+</code></pre>
+<p>tokyo-only というポリシーが作られたら <code>Ctrl-C</code> でコマンドを終了させます。</p>
+<h2 is-upgraded>22.5 Cloud Storage 用設定ファイルの作成 (Osaka リージョン)</h2>
+<pre><code language="language-shell" class="language-shell">cat &lt;&lt; EOF &gt; storage-bucket-tokyo.yaml
+apiVersion: storage.cnrm.cloud.google.com/v1beta1
+kind: StorageBucket
+metadata:
+  annotations:
+    cnrm.cloud.google.com/force-destroy: &#34;false&#34;
+  name: ${PROJECT_ID}-bucket-osaka
+  namespace: config-control
+spec:
+  storageClass: STANDARD
+  location:	asia-northeast2
+  versioning:
+    enabled: true
+  uniformBucketLevelAccess: true
+EOF
+</code></pre>
+<h2 is-upgraded>22.6 Git へのプッシュ</h2>
+<p>作成したリソース用マニフェストを Git リポジトリにプッシュします。</p>
+<pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;create a storage bucket in Osaka&#39; \
+  &amp;&amp; git push origin main \
+  &amp;&amp; nomos status --contexts $(kubectl config current-context) --poll 1s
+</code></pre>
+<p>Tokyo リージョンのみ作成可能なポリシーが設定済みなため、作成に失敗しエラーが出力されます。エラーが確認できたら <code>Ctrl-C</code> でコマンドを終了させます。</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="まとめ" duration="0">
+        <h2 is-upgraded>23.1 大規模な Kubernetes 環境を一貫性を持った形でセキュアに管理する</h2>
+<p class="image-container"><img alt="Multi Cluster Management" src="img/1f4986406e190f6b.png"></p>
+<h2 is-upgraded>23.2 Google Cloud のリソースを KRM で管理する (IaC の実現)</h2>
+<p class="image-container"><img alt="KRM with Config Controller" src="img/e1085d15e0a33f95.png"></p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="クリーンアップ" duration="0">
+        <p>環境のクリーンアップを行います。</p>
+<h2 is-upgraded>プロジェクトの削除</h2>
+<p>最も簡単な方法は Google Cloud プロジェクトごと削除する方法です。</p>
+<pre><code language="language-shell" class="language-shell">gcloud projects delete ${PROJECT_ID} --quiet
+</code></pre>
+
+
+      </google-codelab-step>
+    
+  </google-codelab>
+
+  <script src="https://storage.googleapis.com/codelab-elements/native-shim.js"></script>
+  <script src="https://storage.googleapis.com/codelab-elements/custom-elements.min.js"></script>
+  <script src="https://storage.googleapis.com/codelab-elements/prettify.js"></script>
+  <script src="https://storage.googleapis.com/codelab-elements/codelab-elements.js"></script>
+  <script src="//support.google.com/inapp/api.js"></script>
+
+</body>
+</html>

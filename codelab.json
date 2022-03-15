@@ -1,0 +1,25 @@
+{
+  "environment": "web",
+  "format": "html",
+  "prefix": "https://storage.googleapis.com",
+  "mainga": "UA-49880327-14",
+  "updated": "2022-03-15T14:56:23+09:00",
+  "id": "appdev-anthos-config-management-basic-codelab",
+  "duration": 0,
+  "title": "Anthos Config Management Basic Hands-on",
+  "summary": "Anthos Config Management basic level codelab",
+  "source": "tutorial.md",
+  "theme": "",
+  "status": [
+    "published"
+  ],
+  "category": [
+    "codelab",
+    "markdown"
+  ],
+  "tags": [
+    "web"
+  ],
+  "feedback": "https://github.com/google-cloud-japan/appdev-anthos-config-management-basic-codelab",
+  "url": "appdev-anthos-config-management-basic-codelab"
+}
