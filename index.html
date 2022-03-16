@@ -142,7 +142,7 @@ mkdir -p ${HANDSON_DIR} &amp;&amp; cd ${HANDSON_DIR}
 <p class="image-container"><img alt="Create GKE clusters" src="img/c69cafaab2b52e4b.png"></p>
 <h2 is-upgraded>6.1 GKE クラスタ作成</h2>
 <p>開発環境用の GKE クラスタを 1 つ、本番環境用の GKE クラスタを 2 つ作成します。</p>
-<pre><code language="language-shell" class="language-shell">for cluster_name in dev-cluster01 prod-cluster01 prod-cluster02
+<pre><code language="language-shell" class="language-shell">for cluster_name in dev-cluster01 prod-cluster01
 do
   gcloud container clusters create ${cluster_name} \
     --workload-pool ${PROJECT_ID}.svc.id.goog \
@@ -154,8 +154,17 @@ do
     --async
 done
 </code></pre>
+<pre><code language="language-shell" class="language-shell">gcloud container clusters create prod-cluster02 \
+  --workload-pool ${PROJECT_ID}.svc.id.goog \
+  --release-channel regular \
+  --logging=SYSTEM,WORKLOAD \
+  --monitoring=SYSTEM \
+  --machine-type e2-medium \
+  --zone asia-northeast2-b \
+  --async
+</code></pre>
 <p><a href="https://console.cloud.google.com/kubernetes/list/overview" target="_blank">Kubernetes Engine</a> から GUI で確認できます。</p>
-<aside class="warning"><p> 注: 作成完了まで最大 10 分程度かかることがあります。 </p>
+<aside class="warning"><p> 注: 本番用クラスタは Tokyo、Osaka のリージョンに 1 つずつ作成します。作成完了まで最大 10 分程度かかることがあります。 </p>
 </aside>
 <h2 is-upgraded>6.2 クラスタ作成完了まで待機</h2>
 <p>6.1 のコマンドは非同期実行のためのオプションがついているため、コマンドの成功失敗に関わらず、すぐ結果が返ってきます。</p>
@@ -165,25 +174,21 @@ done
 <p>すべてのクラスタが <strong>RUNNING</strong> になったら、<code>Ctrl-C</code> でコマンドを終了させます。</p>
 <h2 is-upgraded>6.2 クラスタ認証情報の取得</h2>
 <p>Kubernetes の操作には <code>kubectl</code> という CLI を使います。<code>kubectl</code> から作成したクラスタを操作するために認証情報を取得します。</p>
-<pre><code language="language-shell" class="language-shell">for cluster_name in dev-cluster01 prod-cluster01 prod-cluster02
-do
-  gcloud container clusters get-credentials ${cluster_name} --zone=asia-northeast1-b
-done
+<pre><code language="language-shell" class="language-shell">gcloud container clusters get-credentials dev-cluster01 --zone=asia-northeast1-b
+gcloud container clusters get-credentials prod-cluster01 --zone=asia-northeast1-b
+gcloud container clusters get-credentials prod-cluster02 --zone=asia-northeast2-b
 </code></pre>
 <h2 is-upgraded>6.3 クラスタ認証名 (コンテキスト) の簡素化</h2>
 <p><code>kubectl</code> では操作対象のクラスタを認証情報も合わせ、<strong>コンテキスト</strong>というもので管理しています。デフォルトでは長いコンテキスト名が付いてしまうため、以降の手順で簡単に指定できるように短い名称に変えます。</p>
 <pre><code language="language-shell" class="language-shell">kubectl config rename-context gke_${PROJECT_ID}_asia-northeast1-b_dev-cluster01 dev01
 kubectl config rename-context gke_${PROJECT_ID}_asia-northeast1-b_prod-cluster01 prod01
-kubectl config rename-context gke_${PROJECT_ID}_asia-northeast1-b_prod-cluster02 prod02
+kubectl config rename-context gke_${PROJECT_ID}_asia-northeast2-b_prod-cluster02 prod02
 </code></pre>
 <h2 is-upgraded>6.4 クラスタのフリートへの登録</h2>
 <p><a href="https://cloud.google.com/anthos/multicluster-management/fleets" target="_blank">フリート</a>とはクラスタを論理的に編成するための Google Cloud のコンセプトです。これを使うことでマルチクラスタ機能の使用と管理、複数のシステム間での一貫したポリシーの適用が可能になります。</p>
-<pre><code language="language-shell" class="language-shell">for cluster_name in dev-cluster01 prod-cluster01 prod-cluster02
-do
-  gcloud container hub memberships register ${cluster_name} \
-  --gke-cluster=asia-northeast1-b/${cluster_name} \
-  --enable-workload-identity
-done
+<pre><code language="language-shell" class="language-shell">gcloud container hub memberships register dev-cluster01 --gke-cluster=asia-northeast1-b/dev-cluster01 --enable-workload-identity
+gcloud container hub memberships register prod-cluster01 --gke-cluster=asia-northeast1-b/prod-cluster01 --enable-workload-identity
+gcloud container hub memberships register prod-cluster02 --gke-cluster=asia-northeast2-b/prod-cluster02 --enable-workload-identity
 </code></pre>
 
 
@@ -344,25 +349,27 @@ EOF
 <p><code>--context</code> の引数を本番クラスタ (prod01, prod02) の指定に変え、実行してみてください。開発クラスタと同じように名前空間が作られているはずです。</p>
 <h2 is-upgraded>9.5 クラスタへのデプロイの確認 (nomos)</h2>
 <p>ACM では複数のクラスタを管理する CLI として <code>nomos</code> が用意されています。これを使うことで、複数のクラスタの状況、Config Sync により管理されているリソースを一覧化して見ることができます。</p>
-<p>以下のコマンドは、3 クラスタすべての情報を 1 秒おきに表示します。</p>
-<pre><code language="language-shell" class="language-shell">nomos status --contexts dev01,prod01,prod02 --poll 1s
+<p>以下のコマンドは、3 クラスタすべての情報を 3 秒おきに表示します。</p>
+<pre><code language="language-shell" class="language-shell">nomos status --contexts dev01,prod01,prod02 --poll 3s
 </code></pre>
 <p>確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
 <h2 is-upgraded>9.6 手動で作成したリソースを削除し、自動で復旧することを確認 (差分の解消)</h2>
 <pre><code language="language-shell" class="language-shell">kubectl delete -f accountservice.yaml --context dev01 \
-  &amp;&amp; nomos status --contexts dev01,prod01,prod02 --poll 1s
+  &amp;&amp; nomos status --contexts dev01,prod01 --poll 3s
 </code></pre>
 <p>Git で定義されているあるべき状態と、現在の差分が検出され、自動的に修正 (削除したものが再作成) されます。確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
 <h2 is-upgraded>9.7 Git リポジトリからリソースを削除、クラスタに反映されることを確認</h2>
 <p>Git から名前空間を除くリソースを削除します。すべてのクラスタからリソースが削除されることを確認します。</p>
-<pre><code language="language-shell" class="language-shell">git rm accountservice.yaml &amp;&amp; git commit -m &#39;delete accountservice.yaml&#39; &amp;&amp; git push origin main \
+<pre><code language="language-shell" class="language-shell">git rm accountservice.yaml &amp;&amp; git commit -m &#39;delete accountservice.yaml&#39; \
+  &amp;&amp; git push origin main \
   &amp;&amp; nomos status --contexts dev01,prod01,prod02 --poll 1s
 </code></pre>
 <p>確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
 <p>Config Sync ではリソースの誤削除を防ぐため、一度のコミットですべての名前空間、リソースを削除することができないようになっています。そのため、本手順でリソースを、次の手順で名前空間を削除するようにしています。<a href="https://cloud.google.com/anthos-config-management/docs/reference/errors#knv2006" target="_blank">KNV2006: Config Management Erros</a></p>
 <h2 is-upgraded>9.8 Git リポジトリから名前空間リソースを削除、クラスタに反映されることを確認</h2>
 <p>Git から名前空間リソースを削除します。すべてのクラスタから名前空間が削除されることを確認します。</p>
-<pre><code language="language-shell" class="language-shell">git rm namespace.yaml &amp;&amp; git commit -m &#39;delete namespace.yaml&#39; &amp;&amp; git push origin main \
+<pre><code language="language-shell" class="language-shell">git rm namespace.yaml &amp;&amp; git commit -m &#39;delete namespace.yaml&#39; \
+  &amp;&amp; git push origin main \
   &amp;&amp; nomos status --contexts dev01,prod01,prod02 --poll 1s
 </code></pre>
 <p>確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
@@ -378,7 +385,7 @@ EOF
 <h2 is-upgraded>10.1 本番、開発用の設定ファイルを作成</h2>
 <p>参照するブランチを <strong>prod</strong>, <strong>dev</strong> に修正したファイルを作成します。</p>
 <pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR}
-cat apply-spec.yaml | sed -e &#39;s/syncBranch: main/syncBranch: prod/&#39; -e &#39;s/preventDrift: false/preventDrift: true/&#39; -e &#39;5s/enabled: true/enabled: false/&#39; &gt; apply-spec-prod.yaml
+cat apply-spec.yaml | sed -e &#39;s/syncBranch: main/syncBranch: prod/&#39; &gt; apply-spec-prod.yaml
 cat apply-spec.yaml | sed -e &#39;s/syncBranch: main/syncBranch: dev/&#39; &gt; apply-spec-dev.yaml
 </code></pre>
 <h2 is-upgraded>10.2 本番用、開発用の Git ブランチを作成</h2>
@@ -391,7 +398,7 @@ cat apply-spec.yaml | sed -e &#39;s/syncBranch: main/syncBranch: dev/&#39; &gt; 
   &amp;&amp; cd ..
 </code></pre>
 <h2 is-upgraded>10.3 Config Sync の設定変更</h2>
-<p>先程作成した、本番用、開発用で参照するブランチを分けた設定ファイルを適用します。</p>
+<p>先程作成した本番用、開発用で参照するブランチを分けた設定ファイルを適用します。</p>
 <p>本番用クラスタ (Config Sync を一度停止する)</p>
 <pre><code language="language-shell" class="language-shell">for num in 01 02
 do
@@ -405,20 +412,9 @@ done
   --membership=dev-cluster01 \
   --config=./apply-spec-dev.yaml
 </code></pre>
-<p><strong>注</strong>: 本番環境では <a href="https://cloud.google.com/anthos-config-management/docs/how-to/prevent-config-drift" target="_blank">構成ファイルのドリフト防止</a> 機能を有効化しようとしています。有効化には一度 Config Sync を止め、再度起動させる必要があります。</p>
-<h2 is-upgraded>10.4 本番環境の Config Sync を再度有効化する</h2>
-<pre><code language="language-shell" class="language-shell">sed -i -e &#39;s/enabled: false/enabled: true&#39; apply-spec-prod.yaml
-</code></pre>
-<pre><code language="language-shell" class="language-shell">for num in 01 02
-do
-  gcloud beta container hub config-management apply \
-    --membership=prod-cluster${num} \
-    --config=./apply-spec-prod.yaml
-done
-</code></pre>
-<h2 is-upgraded>10. 設定が反映されたことを確認</h2>
+<h2 is-upgraded>10.4 設定が反映されたことを確認</h2>
 <p>参照ブランチが変わったことを <code>nomos</code> コマンドで確認します。</p>
-<pre><code language="language-shell" class="language-shell">nomos status --contexts dev01,prod01,prod02 --poll 1s
+<pre><code language="language-shell" class="language-shell">nomos status --contexts dev01,prod01,prod02 --poll 3s
 </code></pre>
 <p>確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
 <aside class="special"><p> Note: 本番環境で利用する場合、Git リポジトリでのセキュリティ設定も重要となります。例えば今回のようにブランチを分けた場合、本番用ブランチでは操作できるメンバーを絞る、直接プッシュを防ぐ、レビューの Approval 無しにマージさせないなどの保護設定が必要です。 </p>
@@ -455,7 +451,7 @@ done
 </code></pre>
 <h2 is-upgraded>11.5 設定が反映されたことを確認</h2>
 <p>参照リビジョンが変わったことを <code>nomos</code> コマンドで確認します。</p>
-<pre><code language="language-shell" class="language-shell">nomos status --contexts prod01,prod02 --poll 1s
+<pre><code language="language-shell" class="language-shell">nomos status --contexts prod01,prod02 --poll 3s
 </code></pre>
 <p>確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
 <p>これで本番用クラスタ 01, 02 が特定のリビジョンに固定されました。こうすることで Git リポジトリに反映された設定をクラスタ個別に反映させることが可能になりました。</p>
@@ -496,15 +492,9 @@ EOF
 <pre><code language="language-shell" class="language-shell">gcloud beta container hub config-management apply \
   --membership=prod-cluster01 \
   --config=./apply-spec-prod-rev.yaml \
-  &amp;&amp; nomos status --contexts prod01,prod02 --poll 1s
+  &amp;&amp; nomos status --contexts prod01,prod02 --poll 3s
 </code></pre>
 <p>本番用クラスタ 01, 02 で異なるリビジョンが適用されることを確認します。確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
-<h2 is-upgraded>12.6 手動でのリソース削除</h2>
-<p>Config Sync で作成されたリソースを手動で削除します。</p>
-<pre><code language="language-shell" class="language-shell">kubectl delete namespace accountservice --context prod01
-</code></pre>
-<p>Config Sync で管理されているリソースを修正しようとしたので、拒否されるはずです。 これは Config Sync の Admission Webhook により実現されています。</p>
-<p>開発用のクラスタでは preventDrift のパラメータが false に設定していたため、手動での操作自体は拒否されず、操作後自動的に修正されていました。</p>
 
 
       </google-codelab-step>
@@ -529,6 +519,8 @@ EOF
 </li>
 </ul>
 <p>また今回は 1 クラスタが参照する Git リポジトリが 1 つでしたが、複数のリポジトリ (正しくは、クラスタ全体設定用に 1 つ、各名前空間ごとに 1 つずつ) を参照するように構成することも可能です。詳しくは <a href="https://cloud.google.com/anthos-config-management/docs/how-to/namespace-repositories" target="_blank">名前空間リポジトリからの同期を構成する</a> をご確認ください。</p>
+<p>名前空間リポジトリを利用したアーキテクチャ例</p>
+<p class="image-container"><img alt="Per namespace" src="img/41d6589444083c12.png"></p>
 <p>それぞれの要素の使い分けなどは <a href="https://cloud.google.com/architecture/safe-rollouts-with-anthos-config-management" target="_blank">Anthos Config Management を使用した安全なロールアウト</a> をご確認ください。</p>
 
 
@@ -594,7 +586,7 @@ EOF
 <h2 is-upgraded>16.3 Git へのプッシュ</h2>
 <p>作成したポリシーを Git リポジトリにプッシュし、反映を確認します。</p>
 <pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;add replica limit policy for development&#39; &amp;&amp; git push origin dev \
-  &amp;&amp; nomos status --contexts dev01 --poll 1s
+  &amp;&amp; nomos status --contexts dev01 --poll 3s
 </code></pre>
 <p>反映を確認後 <code>Ctrl-C</code> でコマンドを終了させます。</p>
 <h2 is-upgraded>16.4 レプリカ数を 4 にした Deployment を作成</h2>
@@ -654,7 +646,7 @@ EOF
 <pre><code language="language-shell" class="language-shell">gcloud beta container hub config-management apply \
   --membership=prod-cluster01 \
   --config=./apply-spec-prod-rev-17.yaml \
-  &amp;&amp; nomos status --contexts prod01 --poll 1s
+  &amp;&amp; nomos status --contexts prod01 --poll 3s
 </code></pre>
 <p>restrict-default-namespace リソースが Sync されたら、<code>Ctrl-C</code> でコマンドを終了させます。</p>
 <h2 is-upgraded>17.7 Deployment を default ネームスペースに作成</h2>
@@ -707,7 +699,7 @@ EOF
 </code></pre>
 <h2 is-upgraded>18.4 リビジョンを固定した設定ファイルを作成</h2>
 <p>リビジョンを固定した設定ファイルを作成します。</p>
-<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR} &amp;&amp; cat apply-spec-prod-rev-16.yaml \
+<pre><code language="language-shell" class="language-shell">cd ${HANDSON_DIR} &amp;&amp; cat apply-spec-prod-rev-17.yaml \
   | sed -e &#34;s/syncRev: .*$/syncRev: ${REVISION}/&#34; \
   &gt; apply-spec-prod-rev-18.yaml
 </code></pre>
@@ -716,7 +708,7 @@ EOF
 <pre><code language="language-shell" class="language-shell">gcloud beta container hub config-management apply \
   --membership=prod-cluster01 \
   --config=./apply-spec-prod-rev-18.yaml \
-  &amp;&amp; nomos status --contexts prod01 --poll 1s
+  &amp;&amp; nomos status --contexts prod01 --poll 3s
 </code></pre>
 <p>must-have-probes リソースが Sync されたら、<code>Ctrl-C</code> でコマンドを終了させます。</p>
 <h2 is-upgraded>18.6 Probe 設定がない Pod を service1 ネームスペースに作成</h2>
@@ -898,7 +890,7 @@ EOF
 <p>作成したリソース用マニフェストを Git リポジトリにプッシュします。</p>
 <pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;create a storage bucket in Tokyo&#39; \
   &amp;&amp; git push origin main \
-  &amp;&amp; nomos status --contexts $(kubectl config current-context) --poll 1s
+  &amp;&amp; nomos status --contexts $(kubectl config current-context) --poll 3s
 </code></pre>
 <p>Cloud Storage が作られたら <code>Ctrl-C</code> でコマンドを終了させます。</p>
 <p><a href="https://console.cloud.google.com/storage/browser" target="_blank">Cloud Storage 管理画面</a> から GUI で確認できます。</p>
@@ -925,7 +917,7 @@ EOF
 <p>作成したポリシーを Git リポジトリにプッシュします。</p>
 <pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;restrict bucket creation only in Tokyo&#39; \
   &amp;&amp; git push origin main \
-  &amp;&amp; nomos status --contexts $(kubectl config current-context) --poll 1s
+  &amp;&amp; nomos status --contexts $(kubectl config current-context) --poll 3s
 </code></pre>
 <p>tokyo-only というポリシーが作られたら <code>Ctrl-C</code> でコマンドを終了させます。</p>
 <h2 is-upgraded>22.5 Cloud Storage 用設定ファイルの作成 (Osaka リージョン)</h2>
@@ -949,7 +941,7 @@ EOF
 <p>作成したリソース用マニフェストを Git リポジトリにプッシュします。</p>
 <pre><code language="language-shell" class="language-shell">git add . &amp;&amp; git commit -m &#39;create a storage bucket in Osaka&#39; \
   &amp;&amp; git push origin main \
-  &amp;&amp; nomos status --contexts $(kubectl config current-context) --poll 1s
+  &amp;&amp; nomos status --contexts $(kubectl config current-context) --poll 3s
 </code></pre>
 <p>Tokyo リージョンのみ作成可能なポリシーが設定済みなため、作成に失敗しエラーが出力されます。エラーが確認できたら <code>Ctrl-C</code> でコマンドを終了させます。</p>
 
